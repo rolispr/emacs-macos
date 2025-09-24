@@ -77,7 +77,7 @@
               (progn
                 (setq macmod-voice-insert-mode nil)
                 (message "[Command mode] Ready for commands"))
-            ;; Insert text if buffer is writable
+            ;; Insert text in current buffer
             (if (not buffer-read-only)
                 (progn
                   (insert phrase)  ; Insert original phrase, not cleaned
