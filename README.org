@@ -1,0 +1,323 @@
+#+TITLE: macOS Module for Emacs
+#+AUTHOR: Bret Horne
+#+PROPERTY: header-args :eval no
+
+* Overview
+
+Native macOS integration for Emacs through a Swift dynamic module. Provides:
+- Text-to-speech with system voichello
+- Speechk-to-text with local recognition
+- Voice profile enrollment for sp
+- OpenAI TTS integration
+- Whisper API transcriptiohellon
+
+*** Function Mapping
+| Old Function                  | New Function            |
+|------------------------------+-------------------------|
+| macos-speak                  | macmod-tts-speak        |
+| macos-stop-speech            | macmod-tts-stop         |
+| macos-module-ensure-loaded   | macmod-load             |
+| macos-voice-preprocess       | macmod-tts-preprocess   |
+
+*** Variable Mapping
+| Old Variable                  | New Variable              |
+|------------------------------+---------------------------|
+| macos-voice-pronunciations  | macmod-tts-pronunciations |
+| macos-voice-default-rate    | macmod-tts-default-rate   |
+| macos-voice-default-pitch   | macmod-tts-default-pitch  |
+| macos-module-path            | macmod-module-path        |
+| macos-module-loaded-p        | macmod-loaded-p           |
+
+* Building
+
+#+begin_src sh
+cd ~/.emacs.d/macos-module
+swift build
+#+end_src
+
+The module will be built to =.build/arm64-apple-macosx/debug/libEmacsMacOSModule.dylib=
+
+* Installation
+
+** use-package Configuratin
+
+#+begin_src emacs-lisp
+(use-package macmod
+  :ensure nil
+  :load-path "~/git/elisp/macos-module"
+  :demand t
+  :bind (("C-c v" . macmod-voice-command-toggle))
+  :init
+  (setq macmod-tts-default-rate 0.45
+        macmod-tts-default-pitch 1.05
+        macmod-tts-pronunciations
+        '(("Elisp" . "E Lisp")
+          ("Emacs" . "E-macs")
+          ("org-roam" . "org roam")
+          ("API" . "A P I")))
+  :config
+  (macmod-load))
+#+end_src
+
+** Quick Test
+
+#+begin_src emacs-lisp
+;; Test TTS works
+(macmod-speak "Testing voice")
+
+;; Start voice commands - C-c v toggles on/off
+(macmod-voice-command-toggle)
+#+end_src
+
+*** How Voice Commands Work
+
+1. Press `C-c v` to start
+2. speak commands naturally
+4. Say "done" or "stop" to exit, or `C-c v` to toggle off
+*** Available Commands
+
+- "split window" - splits window horizontally
+- "other window" - switch to other window
+- "save buffer" - save current buffer
+- "kill buffer" - kill current buffer
+- "insert [text]" - insert text at point
+- "done" / "stop" - exit voice mode
+
+*** Known Issues
+
+- The system records for 3 seconds then processes (no real-time transcription)
+- macOS may require microphone permission in System Settings → Privacy & Security → Microphone
+
+* Voice Profile (Speaker Verification)
+
+Create a voice profile so commands only respond to YOUR voice.
+
+** How It Works
+
+1. **Enrollment**: Record 30 seconds of your natural speech
+2. **Profile Creation**: System extracts your unique voice characteristics
+3. **Verification**: All future commands checked against your profile
+4. **Privacy**: Profile stored locally in =~/Library/Application Support/Emacs/=
+
+** Setup
+
+#+begin_src emacs-lisp
+;; Load the voice profile module
+(require 'macmod-voice-profile)
+
+;; Check if you have a profile
+(macmod-voice-profile-status)
+
+;; Create your voice profile (30 second recording)
+(macmod-voice-profile-enroll)
+
+;; Delete profile if needed
+(macmod-voice-profile-delete)
+#+end_src
+
+** What Gets Stored
+
+Your voice profile contains:
+- Statistical features of your voice (not actual recordings)
+- Created timestamp
+- Feature vectors extracted during enrollment
+
+The profile is saved as JSON in =~/Library/Application Support/Emacs/voice_profile.json=
+
+** Integration with Voice Commands
+
+When enabled, voice commands will only respond to the enrolled voice:
+
+#+begin_src emacs-lisp
+;; Enable speaker verification
+(setq macmod-voice-profile-enabled t)
+
+;; Now voice commands only work for enrolled user
+(macmod-voice-command-toggle)
+#+end_src
+
+** Manual Setup (without use-package)
+
+#+begin_src emacs-lisp
+;; Add to load path
+(add-to-list 'load-path "~/.emacs.d/macos-module")
+
+;; Load everything
+(require 'macmod)
+
+;; Load the Swift module (after building)
+(macmod-load)
+#+end_src
+
+* Usage
+
+** Text-to-Speech
+
+*** Basic Speaking
+
+#+begin_src emacs-lisp
+;; Speak text with defaults
+(macmod-tts-speak "Hello from Emacs")
+
+;; Speak with specific voice
+(macmod-tts-speak "Hello" "zoe")
+
+;; Speak with custom rate and pitch
+(macmod-tts-speak "Slower and higher" nil 0.35 1.2)
+#+end_src
+
+*** Voice Control
+
+#+begin_src emacs-lisp
+;; Stop speaking
+(macmod-tts-stop)
+
+;; Pause/resume
+(macmod-tts-pause)
+(macmod-tts-continue)
+
+;; List available voices
+(macmod-tts-list-voices)
+#+end_src
+
+*** Pronunciation Customization
+
+#+begin_src emacs-lisp
+;; Configure pronunciations
+(setq macmod-tts-pronunciations
+      '(("kubectl" . "cube control")
+        ("nginx" . "engine x")
+        ("SQL" . "sequel")))
+
+;; Add pronunciations dynamically
+(add-to-list 'macmod-tts-pronunciations '("REPL" . "repple"))
+#+end_src
+
+** Speech-to-Text
+
+*** Local Recognition
+
+#+begin_src emacs-lisp
+;; Check permission status
+(macmod-stt-check-permission)
+
+;; Request permission if needed
+(macmod-stt-request-permission)
+
+;; Start recording
+(macmod-stt-start-recording)
+
+;; Stop and get transcription
+(macmod-stt-stop-recording)
+#+end_src
+
+*** Whisper API
+
+#+begin_src emacs-lisp
+;; Start recording
+(macmod-stt-whisper-start)
+
+;; Transcribe with API key
+(macmod-stt-whisper-transcribe "your-api-key")
+#+end_src
+
+*** Voice Input Loop
+
+#+begin_src emacs-lisp
+;; Set up a callback for transcriptions
+(macmod-stt-voice-loop
+ (lambda (text)
+   (insert text)
+   (macmod-tts-speak text)))
+#+end_src
+
+* Module Functions
+
+The Swift module provides these functions::w
+
+
+** TTS Functions
+- =macmod/speak= - Basic speech
+- =macmod/speak-with-voice= - Spe
+- =macmod/speak-advanced= - Full control (voice, rate, pitch)
+- =macmod/stop-speech= - Stop speaking
+- =macmod/pause-speech= - Pause
+- =macmod/continue-speech= - Resume
+- =macmod/list-voices= - Get available voices
+- =macmod/get-suggested-voices= - Get voice shortcuts
+
+** STT Functions
+- =macmod/request-speech-permission= - Request microphone access
+- =macmod/check-speech-permission= - Check permission status
+- =macmod/start-recognition= - Begin recording
+- =macmod/stop-recognition= - Stop and transcribe
+- =macmod/get-current-transcription= - Get partial result
+
+** OpenAI Functions
+- =macmod/speak-openai= - OpenAI TTS
+- =macmod/stop-openai= - Stop OpenAI playback
+- =macmod/whisper-start= - Start Whisper recording
+- =macmod/whisper-transcribe= - Transcribe via Whisper
+
+* Troubleshooting
+
+** Module won't load
+- Ensure Swift module is built: =swift build=
+- Check path: =macmod-module-path=
+- Verify file exists: =ls .build/arm64-apple-macosx/debug/=
+
+** No sound
+- Check system volume
+- Verify voice is installed: =macmod-tts-list-voices=
+- Try different voice: =(macmod-tts-speak "test" "alex")=
+
+** Permission issues
+- Run: =(macmod-stt-request-permission)=
+- Check System Preferences → Security & Privacy → Microphone
+
+* Examples
+
+** Blog Post Reader
+
+#+begin_src emacs-lisp
+(defun my/read-blog-post ()
+  "Read current buffer as blog post with optimized settings."
+  (interactive)
+  (macmod-tts-speak
+   (buffer-string)
+   "zoe"     ; Premium voice
+   0.42      ; Slower for compreh
+   1.05))    ; Slight pitch increase
+#+end_src
+
+** Voice Commands
+
+#+begin_src emacs-lisp
+(defun my/voice-command ()
+  "Execute voice commands."
+  (interactive)
+  (macmod-stt-voice-loop
+   (lambda (command)
+     (pcase command
+       ((rx "stop") (macmod-tts-stop))
+       ((rx "save") (save-buffer))
+       ((rx "quit") (keyboard-quit))
+       (_ (message "Unknown command: %s" command))))))
+#+end_src
+
+** Technical Documentation Reader
+
+#+begin_src emacs-lisp
+(defun my/setup-tech-pronunciations ()
+  "Configure pronunciations for t
+  (setq macmod-tts-pronunciations
+        '(("Elisp" . "E Lisp")
+          ("CLI" . "C L I")
+          ("API" . "A P I")
+          ("IDE" . "I D E")
+          ("YAML" . "yam-el")
+          ("JSON" . "jay-son")
+          ("SQL" . "sequel")
+          ("nginx" . "engine x")
+          ("kubectl" . "cube control"))))
+#+end_src
