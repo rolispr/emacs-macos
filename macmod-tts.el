@@ -1,6 +1,30 @@
 ;;; macmod-tts.el --- Text-to-speech functionality -*- lexical-binding: t; -*-
 
+;; Copyright (C) 2024 Free Software Foundation, Inc.
+
+;; Author: Your Name
+;; Version: 0.1.0
+;; Package-Requires: ((emacs "27.2"))
+;; Keywords: multimedia, macos, speech, tts
+;; URL: https://github.com/yourusername/macmod
+
+;; This file is part of GNU Emacs.
+
+;; This program is free software; you can redistribute it and/or modify
+;; it under the terms of the GNU General Public License as published by
+;; the Free Software Foundation, either version 3 of the License, or
+;; (at your option) any later version.
+
+;; This program is distributed in the hope that it will be useful,
+;; but WITHOUT ANY WARRANTY; without even the implied warranty of
+;; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+;; GNU General Public License for more details.
+
+;; You should have received a copy of the GNU General Public License
+;; along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
 ;;; Commentary:
+
 ;; TTS interface for the macOS module.
 ;; Provides speaking with system voices, rate/pitch control, and pronunciation customization.
 
@@ -35,8 +59,8 @@ Example: ((\"Elisp\" . \"E Lisp\") (\"Emacs\" . \"E-macs\"))"
   :type '(alist :key-type string :value-type string)
   :group 'macmod-tts)
 
-(defun macmod-tts-preprocess (text)
-  "Apply pronunciation rules to TEXT."
+(defun macmod-tts--preprocess (text)
+  "Apply pronunciation rules to TEXT (internal use)."
   (let ((processed text))
     (dolist (rule macmod-tts-pronunciations processed)
       (setq processed
@@ -52,20 +76,18 @@ Uses preprocessing if `macmod-tts-pronunciations' is configured."
   (unless macmod-loaded-p
     (error "macOS module not loaded. Run M-x macmod-load first"))
 
-  (let* ((processed-text (if macmod-tts-pronunciations
-                             (macmod-tts-preprocess text)
-                           text))
-         (voice (or voice macmod-tts-default-voice))
-         (rate (or rate macmod-tts-default-rate))
-         (pitch (or pitch macmod-tts-default-pitch)))
+  (let ((processed-text (if macmod-tts-pronunciations
+                            (macmod-tts--preprocess text)
+                          text))
+        (voice (or voice macmod-tts-default-voice))
+        (rate (or rate macmod-tts-default-rate))
+        (pitch (or pitch macmod-tts-default-pitch)))
 
     (cond
-     ;; Use advanced function if available
      ((fboundp 'macmod/speak-advanced)
       (macmod/speak-advanced processed-text
                             (or voice "com.apple.voice.compact.en-US.Samantha")
                             rate pitch))
-     ;; Fallback to basic speak
      ((and voice (fboundp 'macmod/speak-with-voice))
       (macmod/speak-with-voice processed-text voice))
      ((fboundp 'macmod/speak)
@@ -95,7 +117,7 @@ Uses preprocessing if `macmod-tts-pronunciations' is configured."
     (error "Continue function not available")))
 
 (defun macmod-tts-list-voices ()
-  "List available system voices."
+  "List available system voices in a buffer."
   (interactive)
   (if (fboundp 'macmod/list-voices)
       (let ((voices (macmod/list-voices)))

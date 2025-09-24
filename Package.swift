@@ -1,14 +1,13 @@
-// swift-tools-version: 5.7
 import PackageDescription
 
 let package = Package(
-  name: "EmacsMacOSModule",
+  name: "Macmod",
   platforms: [.macOS(.v12)],
   products: [
     .library(
-      name: "EmacsMacOSModule",
+      name: "Macmod",
       type: .dynamic,
-      targets: ["EmacsMacOSModule"])
+      targets: ["Macmod"])
   ],
   dependencies: [
     .package(
@@ -17,7 +16,7 @@ let package = Package(
   ],
   targets: [
     .target(
-      name: "EmacsMacOSModule",
+      name: "Macmod",
       dependencies: [
         .product(name: "EmacsSwiftModule", package: "emacs-swift-module")
       ],
