@@ -1,33 +1,41 @@
-#+TITLE: macOS Module for Emacs
+#+TITLE: Macmod - macOS Module for Emacs
 #+AUTHOR: Bret Horne
 #+PROPERTY: header-args :eval no
 
 * Overview
 
 Native macOS integration for Emacs through a dynamic Swift module. Provides:
-- Text-to-speech with system voichello
-- Speechk-to-text with local recognition
-- Voice profile enrollment for sp
+- Text-to-speech with system voices
+- Speech-to-text with local recognition
+- Voice command system
 - OpenAI TTS integration
-- Whisper API transcriptiohellon
+- Whisper API transcription
 
 * Building
 
 #+begin_src sh
-cd ~/.emacs.d/macos-module
 swift build
 #+end_src
 
 * Installation
 
-** use-package Configuratin
+** Load Path Configuration
+
+#+begin_src emacs-lisp
+(add-to-list 'load-path "~/git/elisp/macos-module")
+(require 'macmod)
+(macmod-load)
+#+end_src
+
+** use-package Configuration
 
 #+begin_src emacs-lisp
 (use-package macmod
   :ensure nil
   :load-path "~/git/elisp/macos-module"
   :demand t
-  :bind (("C-c v" . macmod-voice-command-toggle))
+  :bind (("C-c v" . macmod-voice-toggle)
+         ("C-c v c" . macmod-voice-simple-command))
   :init
   (setq macmod-tts-default-rate 0.45
         macmod-tts-default-pitch 1.05
@@ -40,3 +48,87 @@ swift build
   (macmod-load))
 #+end_src
 
+* Features
+
+** Text-to-Speech (TTS)
+
+*** Basic Speech
+#+begin_src emacs-lisp
+;; Speak text with default settings
+(macmod-speak "Hello from Emacs")
+
+;; Stop speech
+(macmod-stop)
+
+;; List available voices
+(macmod-voices)
+#+end_src
+
+*** Advanced TTS
+#+begin_src emacs-lisp
+;; Speak with specific voice, rate, and pitch
+(macmod-tts-speak "Hello world"
+                  "com.apple.voice.compact.en-US.Samantha"
+                  0.5 1.0)
+#+end_src
+
+** Speech-to-Text (STT)
+
+*** Local Recognition
+#+begin_src emacs-lisp
+;; Start recording
+(macmod-stt-start-recording)
+
+;; Stop and get transcription
+(macmod-stt-stop-recording)
+
+;; Check permission status
+(macmod-stt-check-permission)
+#+end_src
+
+*** Whisper API
+#+begin_src emacs-lisp
+;; Start recording for Whisper
+(macmod-stt-whisper-start)
+
+;; Stop and transcribe with API key
+(macmod-stt-whisper-transcribe "your-openai-api-key")
+#+end_src
+
+** Voice Commands
+
+The voice command system allows hands-free control of Emacs:
+
+#+begin_src emacs-lisp
+;; Toggle voice command mode
+(macmod-voice-toggle)  ;; C-c v
+
+;; One-shot voice command
+(macmod-voice-simple-command)  ;; C-c v c
+#+end_src
+
+Built-in voice commands:
+- "other window" - Switch to other window
+- "split window" - Split window horizontally
+- "delete window" - Delete current window
+- "kill buffer" - Kill current buffer
+- "switch buffer" - Switch to another buffer
+- "find file" - Open file
+- "save" - Save current buffer
+- "insert" - Enter insert mode for dictation
+- "command mode" - Return to command mode
+- "done" or "stop" - Stop voice recognition
+
+Any Emacs command can be invoked by speaking its name (with spaces converted to hyphens).
+
+* Requirements
+
+- macOS 12.0 or later
+- Emacs 27.2 or later with dynamic module support
+- Swift 5.7 or later
+- Microphone permissions for STT
+- Speech Recognition permissions (System Settings > Privacy & Security)
+
+* License
+
+GPL-3.0-or-later
