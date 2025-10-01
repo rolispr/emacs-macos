@@ -175,11 +175,11 @@
       (macmod-voice-stop)
     (macmod-voice-start)))
 
-(defun macmod-voice-simple-command ()
-  "Simple voice command recognition (one-shot)."
+(defun macmod-voice-command ()
+  "One-shot voice command recognition."
   (interactive)
   (macmod-stt-start-recording)
-  (message "🎤 Listening... Say command and pause.")
+  (message "🎤 Listening...")
   (run-with-timer 3 nil
                   (lambda ()
                     (when-let* ((text (macmod-stt-stop-recording))
@@ -191,7 +191,7 @@
   macmod-voice--active)
 
 (global-set-key (kbd "C-c v") 'macmod-voice-toggle)
-(global-set-key (kbd "C-c v c") 'macmod-voice-simple-command)
+(global-set-key (kbd "C-c v c") 'macmod-voice-command)
 
 (provide 'macmod-voice)
 ;;; macmod-voice.el ends here
