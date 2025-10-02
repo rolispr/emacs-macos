@@ -1,0 +1,155 @@
+#+TITLE: Zig Voice Module Testing Guide
+
+* Build Instructions
+
+** Prerequisites
+- Zig 0.14.0 or later
+- Emacs with dynamic module support (check with =module-file-suffix=)
+- macOS (for now, Linux/Windows support coming)
+
+** Building
+#+begin_src sh
+# In the macos-module directory
+zig build
+
+# This creates:
+# zig-out/lib/libzig-voice.dylib (macOS)
+# zig-out/lib/libzig-voice.so (Linux)
+#+end_src
+
+* Testing with use-package
+
+** Basic Loading
+#+begin_src emacs-lisp
+;; Add this to your Emacs config to test
+(use-package zig-voice
+  :load-path "~/git/elisp/macos-module"
+  :config
+  (zig-voice-load))
+#+end_src
+
+** Full Test Configuration
+#+begin_src emacs-lisp
+;; Comprehensive test setup
+(use-package zig-voice
+  :load-path "~/git/elisp/macos-module"
+  :init
+  (setq zig-voice-module-path
+        (expand-file-name "~/git/elisp/macos-module/zig-out/lib/libzig-voice.dylib"))
+  :config
+  (zig-voice-load)
+
+  ;; Test basic functions
+  (when (fboundp 'macmod/speak)
+    (message "✓ TTS functions loaded"))
+
+  (when (fboundp 'macmod/start-recording)
+    (message "✓ STT functions loaded"))
+
+  ;; Test speaking
+  (macmod/speak "Hello from Zig")
+
+  ;; List available voices
+  (macmod/list-voices))
+#+end_src
+
+** Interactive Testing
+#+begin_src emacs-lisp
+;; Evaluate this block to test interactively
+(progn
+  ;; Load the module
+  (load-file "~/git/elisp/macos-module/zig-voice.el")
+  (zig-voice-load)
+
+  ;; Check what functions are available
+  (let ((macmod-funcs (apropos-internal "^macmod/")))
+    (message "Found %d macmod functions:" (length macmod-funcs))
+    (dolist (func macmod-funcs)
+      (message "  - %s" func)))
+
+  ;; Test TTS
+  (when (fboundp 'macmod/speak)
+    (macmod/speak "Testing Zig voice module"))
+
+  ;; Test STT status
+  (when (fboundp 'macmod/check-speech-permission)
+    (message "Speech permission: %s" (macmod/check-speech-permission)))
+
+  ;; Test recognition availability
+  (when (fboundp 'macmod/is-speech-available)
+    (message "Speech available: %s" (macmod/is-speech-available))))
+#+end_src
+
+* Function Testing Checklist
+
+** TTS Functions
+- [ ] =macmod/speak= - Basic text to speech
+- [ ] =macmod/speak-with-voice= - TTS with specific voice
+- [ ] =macmod/speak-advanced= - TTS with rate/pitch control
+- [ ] =macmod/stop-speech= - Stop current speech
+- [ ] =macmod/pause-speech= - Pause speech
+- [ ] =macmod/continue-speech= - Resume speech
+- [ ] =macmod/list-voices= - List available voices
+- [ ] =macmod/get-suggested-voices= - Get suggested voices
+- [ ] =macmod/speak-openai= - OpenAI TTS
+- [ ] =macmod/stop-openai= - Stop OpenAI TTS
+
+** STT Functions
+- [ ] =macmod/request-speech-permission= - Request OS permission
+- [ ] =macmod/check-speech-permission= - Check permission status
+- [ ] =macmod/start-recording= - Start recording
+- [ ] =macmod/stop-recording= - Stop and get transcription
+- [ ] =macmod/get-recognition-status= - Get status
+- [ ] =macmod/is-speech-available= - Check availability
+- [ ] =macmod/get-current-transcription= - Get partial transcription
+- [ ] =macmod/whisper-start= - Start Whisper recording
+- [ ] =macmod/whisper-transcribe= - Transcribe with Whisper
+
+* Debugging
+
+** Check Module Loading
+#+begin_src emacs-lisp
+;; Check if modules are supported
+(message "Module support: %s" module-file-suffix)
+
+;; Check if module loaded
+(message "Module loaded: %s" zig-voice--loaded)
+
+;; List all macmod functions
+(apropos "^macmod/")
+#+end_src
+
+** Check Library Path
+#+begin_src sh
+# Verify the library exists
+ls -la zig-out/lib/
+
+# Check library dependencies (macOS)
+otool -L zig-out/lib/libzig-voice.dylib
+
+# Check exported symbols
+nm -g zig-out/lib/libzig-voice.dylib | grep emacs_module_init
+#+end_src
+
+* Current Implementation Status
+
+| Component           | Status    | Notes                           |
+|--------------------+-----------+---------------------------------|
+| Module Loading     | ✓ Working | Basic structure in place        |
+| TTS Stubs          | ✓ Working | Returns placeholder values      |
+| STT Stubs          | ✓ Working | Returns placeholder values      |
+| CoreAudio          | Pending   | macOS audio recording           |
+| AVFoundation TTS   | Pending   | macOS native TTS                |
+| Whisper.cpp        | Pending   | Cross-platform STT              |
+| Linux Support      | Pending   | PulseAudio/ALSA integration    |
+| Windows Support    | Pending   | Windows Audio API               |
+
+* Next Steps for Full Implementation
+
+1. Implement CoreAudio recording wrapper in =audio.zig=
+2. Add AVFoundation TTS bindings for macOS
+3. Integrate whisper.cpp for transcription
+4. Add platform detection and conditional compilation
+5. Implement OpenAI API client for cloud TTS/STT
+6. Add proper error handling and logging
+7. Create comprehensive test suite

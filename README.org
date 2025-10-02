@@ -1,19 +1,39 @@
-#+TITLE: Macmod
+#+TITLE: Voice Module
 #+AUTHOR: Bret Horne
 
-macOS native module for Emacs. Speech synthesis, recognition, and voice commands.
+Native module for Emacs. Speech synthesis, recognition, and voice commands.
 
 * Build
+
+** Swift (macOS only)
 #+begin_src sh
 swift build
 #+end_src
 
+** Zig (Cross-platform)
+#+begin_src sh
+git checkout zig-build
+zig build
+#+end_src
+
 * Install
+
+** Swift Version
 #+begin_src emacs-lisp
 (use-package macmod
   :load-path "~/git/elisp/macos-module"
   :bind ("C-c v" . macmod-voice-toggle)
   :config (macmod-load))
+#+end_src
+
+** Zig Version
+#+begin_src emacs-lisp
+(use-package zig-voice
+  :load-path "~/git/elisp/macos-module"
+  :config
+  (zig-voice-load)
+  ;; Test it
+  (macmod/speak "Hello from Zig"))
 #+end_src
 
 * Usage

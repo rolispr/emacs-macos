@@ -1,0 +1,404 @@
+#+TITLE: Macmod Architecture & EIEIO Refactor
+
+* Current Architecture Issues
+- Scattered state across multiple defvars
+- No clear encapsulation of functionality
+- Procedural rather than object-oriented
+- Hard to extend or customize behavior
+
+* EIEIO Class Structure
+
+** macmod-module (base class)
+#+begin_src emacs-lisp
+(defclass macmod-module ()
+  ((loaded :initform nil
+           :type boolean
+           :documentation "Module load state")
+   (path :initarg :path
+         :type string
+         :documentation "Path to dylib"))
+  :abstract t)
+#+end_src
+
+** macmod-tts
+#+begin_src emacs-lisp
+(defclass macmod-tts (macmod-module)
+  ((voice :initarg :voice
+          :initform nil)
+   (rate :initarg :rate
+         :initform 0.5)
+   (pitch :initarg :pitch
+          :initform 1.0)
+   (pronunciations :initarg :pronunciations
+                   :initform nil)
+   (synthesizer :initform 'local
+                :type symbol))) ; 'local or 'openai
+#+end_src
+
+** macmod-stt
+#+begin_src emacs-lisp
+(defclass macmod-stt (macmod-module)
+  ((recording-p :initform nil)
+   (transcription :initform "")
+   (recognizer :initform 'local
+               :type symbol))) ; 'local or 'whisper
+#+end_src
+
+** macmod-voice-session
+#+begin_src emacs-lisp
+(defclass macmod-voice-session ()
+  ((tts :initarg :tts
+        :type macmod-tts)
+   (stt :initarg :stt
+        :type macmod-stt)
+   (active :initform nil)
+   (mode :initform 'command
+         :type symbol) ; 'command or 'dictation
+   (handlers :initarg :handlers
+             :initform nil)))
+#+end_src
+
+* Architectural Spires
+
+** Speech I/O Spire
+Core bidirectional speech capability
+- TTS engine abstraction (local/OpenAI)
+- STT engine abstraction (local/Whisper)
+- Audio pipeline management
+- Permission handling
+
+** Command Processing Spire
+Voice command interpretation and execution
+- Phrase parsing
+- Command mapping
+- Context awareness
+- Execution dispatch
+
+** Integration Spire
+Emacs environment integration
+- Buffer operations
+- Mode interactions
+- Keybinding management
+- Hook system
+
+** Extension Spire
+User customization and extension points
+- Custom command registration
+- Voice profile management
+- Pronunciation dictionaries
+- Response callbacks
+
+* Benefits of EIEIO Approach
+
+1. **Encapsulation**: Each component manages its own state
+2. **Polymorphism**: Different TTS/STT backends with same interface
+3. **Extensibility**: Users can subclass and override methods
+4. **Cleaner API**: Method calls instead of function proliferation
+5. **State Management**: Instance variables instead of global state
+
+* Migration Path
+
+** Phase 1: Create EIEIO classes alongside existing code
+** Phase 2: Migrate internal functions to methods
+** Phase 3: Deprecate old API, maintain compatibility layer
+** Phase 4: Remove procedural code
+
+* Example Usage After Refactor
+
+#+begin_src emacs-lisp
+;; Create a voice session
+(setq my-voice (macmod-voice-session
+                :tts (macmod-tts :voice "Samantha" :rate 0.6)
+                :stt (macmod-stt :recognizer 'local)))
+
+;; Use it
+(macmod-speak my-voice "Hello world")
+(macmod-start-recording my-voice)
+(macmod-toggle my-voice)
+
+;; Customize behavior
+(defclass my-custom-voice (macmod-voice-session)
+  ())
+
+(cl-defmethod macmod-handle-command ((session my-custom-voice) command)
+  ;; Custom command handling
+  )
+#+end_src
+
+* Next Steps
+
+1. Prototype EIEIO classes in separate file
+2. Test with minimal functionality
+3. Gradually port existing functions to methods
+4. Maintain backward compatibility during transition
+
+* Cross-Platform Zig Architecture
+
+** Motivation for Migration
+- Current Swift implementation is macOS-only
+- Need unified voice solution across Linux, macOS, and Windows
+- Zig provides excellent C interop and cross-compilation
+- whisper.cpp offers high-performance STT without cloud dependencies
+
+** Technology Stack
+*** Core Technologies
+- *zig-emacs*: Zig bindings for Emacs dynamic modules
+- *whisper.cpp*: C++ implementation of OpenAI Whisper
+- *Zig*: Systems language for module implementation
+- *Platform APIs*: Native TTS/audio APIs per platform
+
+*** Architecture Layers
+#+begin_src
+┌─────────────────────────────────────┐
+│         Emacs Lisp Layer            │
+│    (macmod-voice.el, EIEIO)         │
+├─────────────────────────────────────┤
+│       Zig Module Interface          │
+│        (zig-emacs bindings)         │
+├─────────────────────────────────────┤
+│         Audio Pipeline              │
+│   (Recording, Processing, VAD)      │
+├─────────────────────────────────────┤
+│      Speech Recognition             │
+│        (whisper.cpp)                │
+├─────────────────────────────────────┤
+│      Text-to-Speech                 │
+│    (Platform-specific APIs)         │
+├─────────────────────────────────────┤
+│      Platform Abstraction           │
+│  (macOS, Linux, Windows backends)   │
+└─────────────────────────────────────┘
+#+end_src
+
+** Implementation Plan
+
+*** Phase 1: Core Infrastructure
+**** Setup Zig Module Structure
+#+begin_src zig
+// src/main.zig
+const std = @import("std");
+const emacs = @import("emacs");
+const whisper = @import("whisper");
+const audio = @import("audio.zig");
+const tts = @import("tts.zig");
+
+pub fn init(env: emacs.Env) c_int {
+    // Register all functions with Emacs
+    env.defineFunc("macmod-zig/start-recording", startRecording, .{});
+    env.defineFunc("macmod-zig/stop-recording", stopRecording, .{});
+    env.defineFunc("macmod-zig/transcribe", transcribe, .{});
+    env.defineFunc("macmod-zig/speak", speak, .{});
+    return 0;
+}
+#+end_src
+
+**** Audio Abstraction Layer
+#+begin_src zig
+// src/audio.zig
+const AudioBackend = union(enum) {
+    macos: MacOSAudio,
+    linux: PulseAudio,
+    windows: WindowsAudio,
+};
+
+pub const AudioRecorder = struct {
+    backend: AudioBackend,
+    buffer: std.ArrayList(f32),
+
+    pub fn init(allocator: std.mem.Allocator) !AudioRecorder {
+        // Platform detection and initialization
+    }
+
+    pub fn startRecording(self: *AudioRecorder) !void {
+        // Start audio capture
+    }
+
+    pub fn stopRecording(self: *AudioRecorder) ![]const f32 {
+        // Return audio buffer
+    }
+};
+#+end_src
+
+*** Phase 2: Whisper Integration
+**** C Bindings for whisper.cpp
+#+begin_src zig
+// src/whisper.zig
+const c = @cImport({
+    @cInclude("whisper.h");
+});
+
+pub const WhisperContext = struct {
+    ctx: *c.whisper_context,
+    params: c.whisper_full_params,
+
+    pub fn init(model_path: []const u8) !WhisperContext {
+        const ctx = c.whisper_init_from_file(model_path.ptr) orelse
+            return error.ModelLoadFailed;
+
+        return WhisperContext{
+            .ctx = ctx,
+            .params = c.whisper_full_default_params(c.WHISPER_SAMPLING_GREEDY),
+        };
+    }
+
+    pub fn transcribe(self: *WhisperContext, audio: []const f32) ![]const u8 {
+        // Process audio through whisper
+        // Return transcription
+    }
+
+    pub fn deinit(self: *WhisperContext) void {
+        c.whisper_free(self.ctx);
+    }
+};
+#+end_src
+
+*** Phase 3: TTS Implementation
+**** Platform-Specific TTS
+#+begin_src zig
+// src/tts.zig
+pub const TTSEngine = struct {
+    backend: TTSBackend,
+
+    const TTSBackend = union(enum) {
+        macos: struct {
+            // AVSpeechSynthesizer wrapper
+        },
+        linux: struct {
+            // espeak-ng or piper integration
+        },
+        windows: struct {
+            // Windows Speech API
+        },
+    };
+
+    pub fn speak(self: *TTSEngine, text: []const u8, voice: ?[]const u8) !void {
+        switch (self.backend) {
+            .macos => |m| try m.speak(text, voice),
+            .linux => |l| try l.speak(text, voice),
+            .windows => |w| try w.speak(text, voice),
+        }
+    }
+};
+#+end_src
+
+*** Phase 4: Voice Command System
+**** Command Processing Pipeline
+#+begin_src zig
+// src/voice_commands.zig
+pub const VoiceCommandProcessor = struct {
+    recorder: AudioRecorder,
+    whisper: WhisperContext,
+    tts: TTSEngine,
+    command_buffer: std.ArrayList(u8),
+
+    pub fn processCommands(self: *VoiceCommandProcessor) !void {
+        // Continuous recording loop
+        // VAD detection
+        // Whisper transcription
+        // Command parsing
+        // Emacs callback execution
+    }
+};
+#+end_src
+
+** Build Configuration
+*** build.zig
+#+begin_src zig
+const std = @import("std");
+
+pub fn build(b: *std.Build) void {
+    const target = b.standardTargetOptions(.{});
+    const optimize = b.standardOptimizeOption(.{});
+
+    const emacs_module = b.addSharedLibrary(.{
+        .name = "macmod-zig",
+        .root_source_file = .{ .path = "src/main.zig" },
+        .target = target,
+        .optimize = optimize,
+    });
+
+    // Add whisper.cpp as dependency
+    emacs_module.linkLibC();
+    emacs_module.addIncludePath(.{ .path = "deps/whisper.cpp" });
+    emacs_module.addCSourceFile(.{
+        .file = .{ .path = "deps/whisper.cpp/whisper.cpp" },
+        .flags = &.{"-std=c++11"},
+    });
+
+    // Platform-specific linking
+    switch (target.result.os.tag) {
+        .macos => {
+            emacs_module.linkFramework("AVFoundation");
+            emacs_module.linkFramework("CoreAudio");
+        },
+        .linux => {
+            emacs_module.linkSystemLibrary("pulse");
+        },
+        .windows => {
+            emacs_module.linkSystemLibrary("winmm");
+        },
+        else => {},
+    }
+
+    b.installArtifact(emacs_module);
+}
+#+end_src
+
+** Migration Strategy
+
+*** Parallel Development
+1. Keep Swift module functional during transition
+2. Develop Zig module with `macmod-zig-` prefix
+3. Test feature parity on macOS first
+4. Expand to Linux and Windows
+
+*** Feature Parity Checklist
+- [ ] Local STT with system APIs
+- [ ] Whisper STT integration
+- [ ] Local TTS with system voices
+- [ ] OpenAI TTS integration
+- [ ] Voice command processing
+- [ ] Continuous recognition mode
+- [ ] Voice activity detection
+- [ ] Custom pronunciations
+
+*** Testing Plan
+1. Unit tests for each platform backend
+2. Integration tests with Emacs
+3. Performance benchmarks vs Swift version
+4. Cross-platform CI/CD pipeline
+
+** Advantages of Zig Solution
+
+1. **Cross-Platform**: Single codebase for all platforms
+2. **Performance**: Zero-cost abstractions, no runtime
+3. **Safety**: Compile-time memory safety checks
+4. **Interop**: Excellent C/C++ integration for whisper.cpp
+5. **Simplicity**: No complex build systems or dependencies
+6. **Control**: Direct hardware and OS API access
+
+** Development Roadmap
+
+*** Q1 2025
+- [ ] Basic Zig module structure
+- [ ] whisper.cpp integration
+- [ ] macOS audio recording
+- [ ] Simple transcription to Emacs
+
+*** Q2 2025
+- [ ] Linux support (PulseAudio)
+- [ ] Platform TTS implementations
+- [ ] Voice command system
+- [ ] EIEIO integration
+
+*** Q3 2025
+- [ ] Windows support
+- [ ] Advanced features (VAD, pronunciations)
+- [ ] Performance optimizations
+- [ ] Documentation and examples
+
+*** Q4 2025
+- [ ] Deprecate Swift module
+- [ ] Full feature parity
+- [ ] Package for MELPA
+- [ ] Community beta testing
