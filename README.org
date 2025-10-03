@@ -1,53 +1,152 @@
-#+TITLE: Voice Module
+#+TITLE: Vox - Voice Module for Emacs
 #+AUTHOR: Bret Horne
 
-Native module for Emacs. Speech synthesis, recognition, and voice commands.
+Native voice module providing speech synthesis and recognition for Emacs.
+
+* Features
+- Real-time voice commands - speak Emacs commands naturally
+- Dictation mode with auto-punctuation and capitalization
+- System voice integration (multiple voices)
+- Multiple backend support (Swift/macmod and Zig)
+- Cross-platform architecture (macOS now, Linux planned)
 
 * Build
 
-** Swift (macOS only)
+** For Zig backend
+#+begin_src sh
+zig build
+#+end_src
+
+** For Swift backend
 #+begin_src sh
 swift build
 #+end_src
 
-** Zig (Cross-platform)
-#+begin_src sh
-git checkout zig-build
-zig build
-#+end_src
+* Setup
 
-* Install
+** Unified System
+Vox provides a complete voice control system with backend abstraction:
 
-** Swift Version
 #+begin_src emacs-lisp
-(use-package macmod
+(use-package vox
   :load-path "~/git/elisp/macos-module"
-  :bind ("C-c v" . macmod-voice-toggle)
-  :config (macmod-load))
+  :bind
+  (("C-c v v" . vox-toggle)
+   ("C-c v s" . vox-say)
+   ("C-c v a" . vox-speak-advanced)
+   ("C-c v l" . vox-list-voices)
+   ("C-c v p" . vox-pause)
+   ("C-c v c" . vox-continue)
+   ("C-c v x" . vox-stop-speech)
+   ("C-c v b" . vox-build-and-load))
+  :custom
+  (vox-backend 'swift)
+  (vox-default-voice "com.apple.voice.compact.en-US.Samantha")
+  (vox-default-rate 0.6)
+  (vox-default-pitch 1.0)
+  (vox-silence-timeout 8.0)
+  (vox-show-partial-transcription t)
+  (vox-transcription-prefix "[🎤] "))
+
+;; If module not built: C-c v b (vox-build-and-load)
 #+end_src
 
-** Zig Version
-#+begin_src emacs-lisp
-(use-package zig-voice
-  :load-path "~/git/elisp/macos-module"
-  :config
-  (zig-voice-load)
-  ;; Test it
-  (macmod/speak "Hello from Zig"))
-#+end_src
+
+** Grant Permissions
+1. Run `M-x vox-request-permission`
+2. Allow microphone access in the system dialog
+3. May need to restart Emacs after granting permission
 
 * Usage
+
+** Voice Commands
+Start voice recognition with `C-c v v` (vox-toggle).
+
+*** Command Mode (default)
+Speak naturally to execute commands:
+- "save" → executes `save-buffer`
+- "other window" → executes `other-window`
+- "split window" → executes `split-window-right`
+- "find file" → executes `find-file`
+- "kill buffer" → executes `kill-buffer`
+- "switch buffer" → executes `switch-to-buffer`
+- "delete window" → executes `delete-window`
+
+*** Mode Switching
+- Say "insert" → switch to dictation mode (text input)
+- Say "command mode" → switch back to command mode
+- Say "done", "stop", "finish", or "end" → stop voice recognition
+
+*** Text-to-Speech
+- `vox-say` (C-c v s) - Speak text with default settings
+- `vox-speak-advanced` (C-c v a) - Speak with voice/rate/pitch control
+- `vox-list-voices` (C-c v l) - Show available voices
+- `vox-pause` (C-c v p) - Pause speech
+- `vox-continue` (C-c v c) - Continue paused speech
+- `vox-stop-speech` (C-c v x) - Stop speech synthesis
+
+* Configuration
+
+
+** Voice Settings
 #+begin_src emacs-lisp
-;; TTS
-(macmod-speak "Hello")
-(macmod-stop)
+;; Backend selection
+(setq vox-backend 'swift)  ; or 'zig
 
-;; STT
-(macmod-stt-start-recording)
-(macmod-stt-stop-recording)
+;; Voice recognition settings
+(setq vox-silence-timeout 10.0           ; Auto-stop after silence
+      vox-process-delay 1.5              ; Delay before processing phrases
+      vox-polling-interval 0.1           ; Recognition polling rate
+      vox-show-partial-transcription t   ; Show live transcription
+      vox-transcription-prefix "[🎤] ")  ; Echo area prefix
 
-;; Voice commands
-(macmod-voice-toggle)
+;; TTS settings
+(setq vox-default-voice "com.apple.voice.compact.en-US.Samantha"
+      vox-default-rate 0.6               ; Speaking rate (0.0-1.0)
+      vox-default-pitch 1.0)             ; Pitch multiplier
+
+;; Stop words (any of these will stop recognition)
+(setq vox-auto-stop-words '("done" "stop" "finish" "end"))
 #+end_src
 
-Voice commands: "other window", "split window", "save", "find file", "insert" (dictation mode), or any Emacs command name.
+** Custom Commands
+#+begin_src emacs-lisp
+;; Add to vox-cmd-commands in vox-cmd.el
+(setq vox-cmd-commands
+      (append vox-cmd-commands
+              '(("magit status" . magit-status)
+                ("dired" . dired)
+                ("eshell" . eshell))))
+#+end_src
+
+* Architecture
+
+The system is modular with multiple layers:
+
+- **Backend Layer** (`vox-backend.el`) - Abstracts Swift and Zig implementations
+- **Core Layer** (`vox-core.el`) - Unified API and command processing
+- **Interface Layer** (`vox-new.el`) - User commands and configuration
+- **Native Modules**:
+  - Zig backend - Low-level speech integration via whisper
+  - Swift backend - macOS native speech APIs via macmod
+
+The system automatically detects available backends and selects the best one:
+1. Swift (preferred) - More stable, better system integration
+2. Zig (experimental) - Lower latency, cross-platform potential
+
+* Troubleshooting
+
+** No backend available
+- Ensure either the Zig module is built (`zig build`) or Swift backend is available
+- Check that the .dylib file exists in zig-out/lib/
+- Try `M-x vox-backend-info` to verify
+
+** Commands not recognized
+- Check microphone permissions
+- Try `M-x vox-list-commands` to see available commands
+- Speak clearly and pause between words
+- Check `*Messages*` buffer for recognition feedback
+
+** Backend specific issues
+- Swift: Requires macOS 10.15+, check Swift backend is loaded
+- Zig: Requires whisper model file, check path in stt.zig

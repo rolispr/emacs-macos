@@ -1,0 +1,21 @@
+.{
+    .name = .vox,
+    .version = "0.1.0",
+    .fingerprint = 0x13864396510cd448,
+    .minimum_zig_version = "0.14.0",
+    .dependencies = .{
+        .@"zig-emacs" = .{
+            .url = "https://github.com/jiacai2050/zig-emacs/archive/refs/heads/main.tar.gz",
+            .hash = "122022177ecaa21db77263f19d1a1bccb09e76dde34676d91277368bcd64f69e1c83",
+        },
+        .whisper_cpp = .{
+            .url = "https://github.com/ggerganov/whisper.cpp/archive/refs/tags/v1.7.3.tar.gz",
+            .hash = "1220810822a079226720a8e848e80abe12ad44e0bbbc2e9fbd2a80a5bd3485a73694",
+        },
+    },
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "zig-src",
+    },
+}

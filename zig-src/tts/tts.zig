@@ -1,162 +1,207 @@
 const std = @import("std");
-const emacs_api = @import("../emacs_api.zig");
+const emacs = @import("emacs");
+const platform = @import("../platform/platform.zig");
 
-// TTS interface - platform implementations will be added
-pub fn speak(env: *emacs_api.EmacsEnv, nargs: isize, args: [*c]emacs_api.EmacsValue, data: ?*anyopaque) callconv(.C) emacs_api.EmacsValue {
-    _ = data;
-    if (nargs != 1) {
-        return emacs_api.signalError(env, "wrong-number-of-arguments", "speak requires 1 argument");
+// Global TTS backend instance
+var tts_backend: ?platform.TTSBackend = null;
+var tts_mutex = std.Thread.Mutex{};
+
+fn ensureTTSBackend() !*platform.TTSBackend {
+    tts_mutex.lock();
+    defer tts_mutex.unlock();
+
+    if (tts_backend == null) {
+        tts_backend = try platform.TTSBackend.init(std.heap.page_allocator);
+    }
+    return &tts_backend.?;
+}
+
+pub fn speak(env: *emacs.Env, args: []const emacs.Value) emacs.Error!emacs.Value {
+    if (args.len != 1) {
+        return env.wrongTypeArgument();
     }
 
-    const allocator = std.heap.page_allocator;
-    const text = emacs_api.extractString(env, args[0], allocator) catch {
-        return emacs_api.signalError(env, "invalid-argument", "Invalid text argument");
+    const text = try env.getString(args[0]);
+    defer env.allocator.free(text);
+
+    const backend = ensureTTSBackend() catch {
+        return env.signalError("tts-error", "Failed to initialize TTS backend");
     };
-    defer allocator.free(text);
 
-    // TODO: Implement platform-specific TTS
-    std.debug.print("[TTS] Would speak: {s}\n", .{text});
+    backend.speak(text, null) catch {
+        return env.signalError("tts-error", "Failed to speak text");
+    };
 
-    return emacs_api.makeT(env);
+    return env.makeT();
 }
 
-pub fn speakWithVoice(env: *emacs_api.EmacsEnv, nargs: isize, args: [*c]emacs_api.EmacsValue, data: ?*anyopaque) callconv(.C) emacs_api.EmacsValue {
-    _ = data;
-    if (nargs != 2) {
-        return emacs_api.signalError(env, "wrong-number-of-arguments", "speak-with-voice requires 2 arguments");
+pub fn speakWithVoice(env: *emacs.Env, args: []const emacs.Value) emacs.Error!emacs.Value {
+    if (args.len != 2) {
+        return env.wrongTypeArgument();
     }
 
-    const allocator = std.heap.page_allocator;
-    const text = emacs_api.extractString(env, args[0], allocator) catch {
-        return emacs_api.signalError(env, "invalid-argument", "Invalid text argument");
+    const text = try env.getString(args[0]);
+    defer env.allocator.free(text);
+
+    const voice = try env.getString(args[1]);
+    defer env.allocator.free(voice);
+
+    const backend = ensureTTSBackend() catch {
+        return env.signalError("tts-error", "Failed to initialize TTS backend");
     };
-    defer allocator.free(text);
 
-    const voice = emacs_api.extractString(env, args[1], allocator) catch {
-        return emacs_api.signalError(env, "invalid-argument", "Invalid voice argument");
+    backend.speak(text, voice) catch {
+        return env.signalError("tts-error", "Failed to speak text");
     };
-    defer allocator.free(voice);
 
-    // TODO: Implement with voice selection
-    std.debug.print("[TTS] Would speak with voice {s}: {s}\n", .{ voice, text });
-
-    return emacs_api.makeT(env);
+    return env.makeT();
 }
 
-pub fn speakAdvanced(env: *emacs_api.EmacsEnv, nargs: isize, args: [*c]emacs_api.EmacsValue, data: ?*anyopaque) callconv(.C) emacs_api.EmacsValue {
-    _ = data;
-    if (nargs != 4) {
-        return emacs_api.signalError(env, "wrong-number-of-arguments", "speak-advanced requires 4 arguments");
+pub fn speakAdvanced(env: *emacs.Env, args: []const emacs.Value) emacs.Error!emacs.Value {
+    if (args.len != 4) {
+        return env.wrongTypeArgument();
     }
 
-    const allocator = std.heap.page_allocator;
-    const text = emacs_api.extractString(env, args[0], allocator) catch {
-        return emacs_api.signalError(env, "invalid-argument", "Invalid text argument");
+    const text = try env.getString(args[0]);
+    defer env.allocator.free(text);
+
+    const voice = try env.getString(args[1]);
+    defer env.allocator.free(voice);
+
+    const rate = try env.getFloat(args[2]);
+    const pitch = try env.getFloat(args[3]);
+
+    const backend = ensureTTSBackend() catch {
+        return env.signalError("tts-error", "Failed to initialize TTS backend");
     };
-    defer allocator.free(text);
 
-    const voice = emacs_api.extractString(env, args[1], allocator) catch {
-        return emacs_api.signalError(env, "invalid-argument", "Invalid voice argument");
+    // Set parameters
+    backend.setRate(@floatCast(rate));
+    backend.setPitch(@floatCast(pitch));
+
+    backend.speak(text, voice) catch {
+        return env.signalError("tts-error", "Failed to speak text");
     };
-    defer allocator.free(voice);
 
-    const rate = env.extract_float.?(env, args[2]);
-    const pitch = env.extract_float.?(env, args[3]);
-
-    // TODO: Implement with advanced parameters
-    std.debug.print("[TTS] Advanced speak - voice: {s}, rate: {d}, pitch: {d}: {s}\n", .{ voice, rate, pitch, text });
-
-    return emacs_api.makeT(env);
+    return env.makeT();
 }
 
-pub fn stopSpeech(env: *emacs_api.EmacsEnv, nargs: isize, args: [*c]emacs_api.EmacsValue, data: ?*anyopaque) callconv(.C) emacs_api.EmacsValue {
-    _ = nargs;
+pub fn stopSpeech(env: *emacs.Env, args: []const emacs.Value) emacs.Error!emacs.Value {
     _ = args;
-    _ = data;
 
-    // TODO: Stop speech synthesis
-    std.debug.print("[TTS] Stopping speech\n", .{});
+    const backend = ensureTTSBackend() catch {
+        return env.makeNil();
+    };
 
-    return emacs_api.makeNil(env);
+    backend.stop();
+
+    return env.makeNil();
 }
 
-pub fn pauseSpeech(env: *emacs_api.EmacsEnv, nargs: isize, args: [*c]emacs_api.EmacsValue, data: ?*anyopaque) callconv(.C) emacs_api.EmacsValue {
-    _ = nargs;
+pub fn pauseSpeech(env: *emacs.Env, args: []const emacs.Value) emacs.Error!emacs.Value {
     _ = args;
-    _ = data;
 
-    // TODO: Pause speech synthesis
-    std.debug.print("[TTS] Pausing speech\n", .{});
+    const backend = ensureTTSBackend() catch {
+        return env.makeNil();
+    };
 
-    return emacs_api.makeNil(env);
+    backend.pause();
+
+    return env.makeNil();
 }
 
-pub fn continueSpeech(env: *emacs_api.EmacsEnv, nargs: isize, args: [*c]emacs_api.EmacsValue, data: ?*anyopaque) callconv(.C) emacs_api.EmacsValue {
-    _ = nargs;
+pub fn continueSpeech(env: *emacs.Env, args: []const emacs.Value) emacs.Error!emacs.Value {
     _ = args;
-    _ = data;
 
-    // TODO: Continue speech synthesis
-    std.debug.print("[TTS] Continuing speech\n", .{});
+    const backend = ensureTTSBackend() catch {
+        return env.makeNil();
+    };
 
-    return emacs_api.makeNil(env);
+    backend.continueSpeaking();
+
+    return env.makeNil();
 }
 
-pub fn listVoices(env: *emacs_api.EmacsEnv, nargs: isize, args: [*c]emacs_api.EmacsValue, data: ?*anyopaque) callconv(.C) emacs_api.EmacsValue {
-    _ = nargs;
+pub fn listVoices(env: *emacs.Env, args: []const emacs.Value) emacs.Error!emacs.Value {
     _ = args;
-    _ = data;
 
-    // TODO: Return actual voice list
-    // For now, return empty list
-    const voices = [_]emacs_api.EmacsValue{};
-    return emacs_api.makeList(env, &voices);
-}
+    const backend = ensureTTSBackend() catch {
+        return env.makeNil();
+    };
 
-pub fn getSuggestedVoices(env: *emacs_api.EmacsEnv, nargs: isize, args: [*c]emacs_api.EmacsValue, data: ?*anyopaque) callconv(.C) emacs_api.EmacsValue {
-    _ = nargs;
-    _ = args;
-    _ = data;
+    const voices = backend.listVoices() catch {
+        return env.makeNil();
+    };
+    defer std.heap.page_allocator.free(voices);
 
-    // TODO: Return suggested voices dictionary
-    return emacs_api.makeNil(env);
-}
+    // Convert to Emacs list
+    var list = env.makeNil();
+    var i = voices.len;
+    while (i > 0) {
+        i -= 1;
+        const voice_info = voices[i];
 
-pub fn speakOpenAI(env: *emacs_api.EmacsEnv, nargs: isize, args: [*c]emacs_api.EmacsValue, data: ?*anyopaque) callconv(.C) emacs_api.EmacsValue {
-    _ = data;
-    if (nargs != 3) {
-        return emacs_api.signalError(env, "wrong-number-of-arguments", "speak-openai requires 3 arguments");
+        // Create association list for voice info
+        const id_str = try env.makeString(voice_info.id);
+        const name_str = try env.makeString(voice_info.name);
+        const lang_str = try env.makeString(voice_info.language);
+
+        const id_cons = try env.cons(try env.intern("id"), id_str);
+        const name_cons = try env.cons(try env.intern("name"), name_str);
+        const lang_cons = try env.cons(try env.intern("language"), lang_str);
+
+        var voice_alist = try env.cons(lang_cons, env.makeNil());
+        voice_alist = try env.cons(name_cons, voice_alist);
+        voice_alist = try env.cons(id_cons, voice_alist);
+
+        list = try env.cons(voice_alist, list);
     }
 
-    const allocator = std.heap.page_allocator;
-    const text = emacs_api.extractString(env, args[0], allocator) catch {
-        return emacs_api.signalError(env, "invalid-argument", "Invalid text argument");
-    };
-    defer allocator.free(text);
+    return list;
+}
 
-    const api_key = emacs_api.extractString(env, args[1], allocator) catch {
-        return emacs_api.signalError(env, "invalid-argument", "Invalid API key argument");
-    };
-    defer allocator.free(api_key);
+pub fn getSuggestedVoices(env: *emacs.Env, args: []const emacs.Value) emacs.Error!emacs.Value {
+    _ = args;
 
-    const voice = emacs_api.extractString(env, args[2], allocator) catch {
-        return emacs_api.signalError(env, "invalid-argument", "Invalid voice argument");
-    };
-    defer allocator.free(voice);
+    // Return a dictionary of suggested voices
+    const en_us = try env.makeString("com.apple.voice.enhanced.en-US.Samantha");
+    const en_gb = try env.makeString("com.apple.voice.enhanced.en-GB.Daniel");
+
+    const en_us_cons = try env.cons(try env.intern("en-US"), en_us);
+    const en_gb_cons = try env.cons(try env.intern("en-GB"), en_gb);
+
+    var dict = env.makeNil();
+    dict = try env.cons(en_gb_cons, dict);
+    dict = try env.cons(en_us_cons, dict);
+
+    return dict;
+}
+
+pub fn speakOpenAI(env: *emacs.Env, args: []const emacs.Value) emacs.Error!emacs.Value {
+    if (args.len != 3) {
+        return env.wrongTypeArgument();
+    }
+
+    const text = try env.getString(args[0]);
+    defer env.allocator.free(text);
+
+    const api_key = try env.getString(args[1]);
+    defer env.allocator.free(api_key);
+
+    const voice = try env.getString(args[2]);
+    defer env.allocator.free(voice);
 
     // TODO: Implement OpenAI TTS
     std.debug.print("[TTS] OpenAI speak with voice {s}\n", .{voice});
 
-    return emacs_api.makeNil(env);
+    return env.makeNil();
 }
 
-pub fn stopOpenAI(env: *emacs_api.EmacsEnv, nargs: isize, args: [*c]emacs_api.EmacsValue, data: ?*anyopaque) callconv(.C) emacs_api.EmacsValue {
-    _ = nargs;
+pub fn stopOpenAI(env: *emacs.Env, args: []const emacs.Value) emacs.Error!emacs.Value {
     _ = args;
-    _ = data;
 
     // TODO: Stop OpenAI synthesis
     std.debug.print("[TTS] Stopping OpenAI speech\n", .{});
 
-    return emacs_api.makeNil(env);
+    return env.makeNil();
 }

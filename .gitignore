@@ -1,1 +1,21 @@
-.build
+# Swift build artifacts
+.build/
+*.dylib
+
+# Zig build artifacts
+zig-cache/
+zig-out/
+
+# Emacs artifacts
+*.elc
+*~
+\#*\#
+.DS_Store
+
+# Temporary files
+*.tmp
+*.log
+
+# Legacy files (kept locally but not tracked)
+macmod*.el
+zig-voice.el

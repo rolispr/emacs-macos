@@ -1,87 +1,192 @@
 const std = @import("std");
-const emacs_api = @import("emacs_api.zig");
-const tts = @import("tts/tts.zig");
-const stt = @import("stt/stt.zig");
+const emacs = @import("emacs");
+const platform = @import("platform/platform.zig");
 
-// Module initialization - required by Emacs
-export fn plugin_is_GPL_compatible() c_int {
-    return 0;
-}
+var tts_backend: ?platform.TTSBackend = null;
+var tts_mutex = std.Thread.Mutex{};
+var stt_backend: ?platform.STTBackend = null;
+var stt_mutex = std.Thread.Mutex{};
+var stt_initialized = false;
 
-export fn emacs_module_init(runtime: *emacs_api.EmacsRuntime) c_int {
-    const env = runtime.get_environment.?(runtime) orelse return 1;
+const Module = struct {
+    pub fn init(env: emacs.Env) c_int {
+        // Initialize TTS backend
+        tts_backend = platform.TTSBackend.init(std.heap.c_allocator) catch {
+            std.debug.print("[TTS] Failed to initialize TTS backend\n", .{});
+            return 1;
+        };
 
-    // Register all functions to match Swift module API
-    registerTTSFunctions(env) catch return 2;
-    registerSTTFunctions(env) catch return 2;
+        // STT backend will be initialized on first use
 
-    return 0;
-}
+        // Register TTS functions
+        env.makeFunction("vox-speak", speak, .{ .doc_string = "Speak text using system voice" });
+        env.makeFunction("vox-speak-with-voice", speakWithVoice, .{ .doc_string = "Speak text using specific system voice" });
+        env.makeFunction("vox-stop", stopSpeech, .{ .doc_string = "Stop speech synthesis" });
+        env.makeFunction("vox-list-voices", listVoices, .{ .doc_string = "List available system voices" });
 
-fn registerTTSFunctions(env: *emacs_api.EmacsEnv) !void {
-    // Basic TTS
-    try emacs_api.registerFunction(env, "macmod/speak", 1, 1, tts.speak,
-        "Speak text using system voice");
+        // Register STT functions
+        env.makeFunction("vox-start-recording", startRecording, .{ .doc_string = "Start speech recognition" });
+        env.makeFunction("vox-stop-recording", stopRecording, .{ .doc_string = "Stop speech recognition" });
+        env.makeFunction("vox-get-recognition-text", getRecognitionText, .{ .doc_string = "Get current recognized text" });
+        env.makeFunction("vox-clear-recognition-text", clearRecognitionText, .{ .doc_string = "Clear recognized text buffer" });
+        env.makeFunction("vox-process-audio", processAudio, .{ .doc_string = "Process buffered audio with whisper" });
+        env.makeFunction("vox-request-permission", requestPermission, .{ .doc_string = "Request speech recognition permission" });
 
-    try emacs_api.registerFunction(env, "macmod/speak-with-voice", 2, 2, tts.speakWithVoice,
-        "Speak text using specific system voice");
+        return 0;
+    }
 
-    try emacs_api.registerFunction(env, "macmod/speak-advanced", 4, 4, tts.speakAdvanced,
-        "Speak text with voice, rate, and pitch control");
+    fn speak(env: emacs.Env, text_value: emacs.Value) emacs.Value {
+        const allocator = std.heap.c_allocator;
+        const text = env.extractString(allocator, text_value) catch return env.nil;
+        defer allocator.free(text);
 
-    // TTS Control
-    try emacs_api.registerFunction(env, "macmod/stop-speech", 0, 0, tts.stopSpeech,
-        "Stop speech synthesis");
+        tts_mutex.lock();
+        defer tts_mutex.unlock();
 
-    try emacs_api.registerFunction(env, "macmod/pause-speech", 0, 0, tts.pauseSpeech,
-        "Pause speech synthesis");
+        if (tts_backend) |*backend| {
+            backend.speak(text, null) catch {
+                std.debug.print("[TTS] Failed to speak text\n", .{});
+                return env.nil;
+            };
+        }
 
-    try emacs_api.registerFunction(env, "macmod/continue-speech", 0, 0, tts.continueSpeech,
-        "Continue paused speech");
+        return env.t;
+    }
 
-    // Voice Management
-    try emacs_api.registerFunction(env, "macmod/list-voices", 0, 0, tts.listVoices,
-        "List available system voices");
+    fn speakWithVoice(env: emacs.Env, text_value: emacs.Value, voice_value: emacs.Value) emacs.Value {
+        const allocator = std.heap.c_allocator;
+        const text = env.extractString(allocator, text_value) catch return env.nil;
+        defer allocator.free(text);
+        const voice = env.extractString(allocator, voice_value) catch return env.nil;
+        defer allocator.free(voice);
 
-    try emacs_api.registerFunction(env, "macmod/get-suggested-voices", 0, 0, tts.getSuggestedVoices,
-        "Get suggested voice identifiers");
+        tts_mutex.lock();
+        defer tts_mutex.unlock();
 
-    // OpenAI TTS
-    try emacs_api.registerFunction(env, "macmod/speak-openai", 3, 3, tts.speakOpenAI,
-        "Synthesize and speak text using OpenAI TTS");
+        if (tts_backend) |*backend| {
+            backend.speak(text, voice) catch {
+                std.debug.print("[TTS] Failed to speak text with voice\n", .{});
+                return env.nil;
+            };
+        }
 
-    try emacs_api.registerFunction(env, "macmod/stop-openai", 0, 0, tts.stopOpenAI,
-        "Stop any ongoing OpenAI speech synthesis");
-}
+        return env.t;
+    }
 
-fn registerSTTFunctions(env: *emacs_api.EmacsEnv) !void {
-    // Permissions
-    try emacs_api.registerFunction(env, "macmod/request-speech-permission", 0, 0, stt.requestPermission,
-        "Request speech recognition permission");
+    fn stopSpeech(env: emacs.Env) emacs.Value {
+        tts_mutex.lock();
+        defer tts_mutex.unlock();
 
-    try emacs_api.registerFunction(env, "macmod/check-speech-permission", 0, 0, stt.checkPermission,
-        "Check current speech recognition permission status");
+        if (tts_backend) |*backend| {
+            backend.stop();
+        }
 
-    // Local STT
-    try emacs_api.registerFunction(env, "macmod/start-recording", 0, 0, stt.startRecording,
-        "Start recording with speech recognition");
+        return env.t;
+    }
 
-    try emacs_api.registerFunction(env, "macmod/stop-recording", 0, 0, stt.stopRecording,
-        "Stop recording and get transcription");
+    fn listVoices(env: emacs.Env) emacs.Value {
+        // For now, return a simple list of voice IDs
+        // TODO: Implement full voice listing once platform layer supports it
+        return env.nil;
+    }
 
-    try emacs_api.registerFunction(env, "macmod/get-recognition-status", 0, 0, stt.getStatus,
-        "Get speech recognition status");
+    // STT Functions
+    fn startRecording(env: emacs.Env) emacs.Value {
+        std.debug.print("[STT] startRecording called\n", .{});
+        stt_mutex.lock();
+        defer stt_mutex.unlock();
 
-    try emacs_api.registerFunction(env, "macmod/is-speech-available", 0, 0, stt.isAvailable,
-        "Check if speech recognition is available");
+        // Lazy initialize STT backend on first use
+        if (!stt_initialized) {
+            std.debug.print("[STT] Initializing STT backend on first use\n", .{});
+            if (platform.STTBackend.init(std.heap.c_allocator)) |backend| {
+                stt_backend = backend;
+                std.debug.print("[STT] Backend initialized successfully\n", .{});
+            } else |err| {
+                std.debug.print("[STT] Failed to initialize STT backend: {}\n", .{err});
+                stt_backend = null;
+            }
+            stt_initialized = true;
+        }
 
-    try emacs_api.registerFunction(env, "macmod/get-current-transcription", 0, 0, stt.getCurrentTranscription,
-        "Get current partial transcription while recording");
+        if (stt_backend) |*backend| {
+            std.debug.print("[STT] Backend exists, calling startRecording\n", .{});
+            backend.startRecording() catch |err| {
+                std.debug.print("[STT] Failed to start recording: {}\n", .{err});
+                return env.nil;
+            };
+            std.debug.print("[STT] Recording started successfully\n", .{});
+            return env.t;
+        }
 
-    // Whisper STT
-    try emacs_api.registerFunction(env, "macmod/whisper-start", 0, 0, stt.whisperStart,
-        "Start recording audio for Whisper transcription");
+        std.debug.print("[STT] No backend available\n", .{});
+        return env.nil;
+    }
 
-    try emacs_api.registerFunction(env, "macmod/whisper-transcribe", 1, 1, stt.whisperTranscribe,
-        "Stop recording and transcribe via Whisper API");
+    fn stopRecording(env: emacs.Env) emacs.Value {
+        stt_mutex.lock();
+        defer stt_mutex.unlock();
+
+        if (stt_backend) |*backend| {
+            backend.stopRecording() catch {
+                std.debug.print("[STT] Failed to stop recording\n", .{});
+                return env.nil;
+            };
+            return env.t;
+        }
+
+        return env.nil;
+    }
+
+    fn getRecognitionText(env: emacs.Env) emacs.Value {
+        stt_mutex.lock();
+        defer stt_mutex.unlock();
+
+        if (stt_backend) |*backend| {
+            const text = backend.getCurrentText();
+            if (text.len > 0) {
+                const str = std.heap.page_allocator.dupeZ(u8, text) catch return env.nil;
+                defer std.heap.page_allocator.free(str);
+                return env.makeString(str);
+            }
+        }
+
+        return env.makeString("");
+    }
+
+    fn clearRecognitionText(env: emacs.Env) emacs.Value {
+        stt_mutex.lock();
+        defer stt_mutex.unlock();
+
+        if (stt_backend) |*backend| {
+            backend.clearText();
+            return env.t;
+        }
+
+        return env.nil;
+    }
+
+    fn processAudio(env: emacs.Env) emacs.Value {
+        stt_mutex.lock();
+        defer stt_mutex.unlock();
+
+        if (stt_backend) |*backend| {
+            backend.processBufferedAudio();
+            return env.t;
+        }
+
+        return env.nil;
+    }
+
+    fn requestPermission(env: emacs.Env) emacs.Value {
+        if (@hasDecl(platform.MacOSSTTBackend, "requestAuthorization")) {
+            platform.MacOSSTTBackend.requestAuthorization();
+            return env.t;
+        }
+        return env.nil;
+    }
+};
+
+comptime {
+    emacs.module_init(Module);
 }

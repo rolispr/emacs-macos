@@ -1,13 +1,14 @@
+// swift-tools-version: 6.0
 import PackageDescription
 
 let package = Package(
-  name: "Macmod",
+  name: "Vox",
   platforms: [.macOS(.v12)],
   products: [
     .library(
-      name: "Macmod",
+      name: "Vox",
       type: .dynamic,
-      targets: ["Macmod"])
+      targets: ["Vox"])
   ],
   dependencies: [
     .package(
@@ -16,7 +17,7 @@ let package = Package(
   ],
   targets: [
     .target(
-      name: "Macmod",
+      name: "Vox",
       dependencies: [
         .product(name: "EmacsSwiftModule", package: "emacs-swift-module")
       ],
