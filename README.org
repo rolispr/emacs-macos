@@ -7,15 +7,10 @@ Native voice module providing speech synthesis and recognition for Emacs.
 - Real-time voice commands - speak Emacs commands naturally
 - Dictation mode with auto-punctuation and capitalization
 - System voice integration (multiple voices)
-- Multiple backend support (Swift/macmod and Zig)
+- Multiple backend support (swift and very experimental Zig+Whisper.cpp)
 - Cross-platform architecture (macOS now, Linux planned)
 
 * Build
-
-** For Zig backend
-#+begin_src sh
-zig build
-#+end_src
 
 ** For Swift backend
 #+begin_src sh
@@ -119,27 +114,6 @@ Speak naturally to execute commands:
                 ("eshell" . eshell))))
 #+end_src
 
-* Architecture
-
-The system is modular with multiple layers:
-
-- **Backend Layer** (`vox-backend.el`) - Abstracts Swift and Zig implementations
-- **Core Layer** (`vox-core.el`) - Unified API and command processing
-- **Interface Layer** (`vox-new.el`) - User commands and configuration
-- **Native Modules**:
-  - Zig backend - Low-level speech integration via whisper
-  - Swift backend - macOS native speech APIs via macmod
-
-The system automatically detects available backends and selects the best one:
-1. Swift (preferred) - More stable, better system integration
-2. Zig (experimental) - Lower latency, cross-platform potential
-
-* Troubleshooting
-
-** No backend available
-- Ensure either the Zig module is built (`zig build`) or Swift backend is available
-- Check that the .dylib file exists in zig-out/lib/
-- Try `M-x vox-backend-info` to verify
 
 ** Commands not recognized
 - Check microphone permissions
