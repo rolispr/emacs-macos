@@ -82,9 +82,7 @@
 
 ;;; Backend System
 
-(defclass vox-backend ()
-  ()
-  "Base class for voice backends.")
+(defclass vox-backend () ())
 
 (cl-defgeneric vox-backend-initialize (backend)
   "Initialize BACKEND.")
