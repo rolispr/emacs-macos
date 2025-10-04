@@ -1,4 +1,4 @@
-#+TITLE: Vox - Voice Module for Emacs
+#+TITLE: Vox - A module for emacs for tts/stt
 #+AUTHOR: Bret Horne
 
 Native voice module providing speech synthesis and recognition for Emacs.
