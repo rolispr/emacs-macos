@@ -1,7 +1,5 @@
 ;;; vox.el --- Voice control for Emacs -*- lexical-binding: t; -*-
 
-;; Copyright (C) 2024 Free Software Foundation, Inc.
-
 ;; Author: Bret Horne
 ;; Version: 0.2.0
 ;; Package-Requires: ((emacs "27.2") (cl-lib "0.5"))
